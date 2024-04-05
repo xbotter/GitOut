@@ -1,0 +1,32 @@
+name: NuGet
+
+on:
+  push:
+    tags: [ '*' ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build
+      run: dotnet build --no-restore
+
+    - name: Get the version tag
+      run: echo "VERSION_TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+
+    - name: Pack
+      run: dotnet pack --no-build -c Release -o out -p:Version=$VERSION_TAG
+
+    - name: Push
+      run: dotnet nuget push out/*.nupkg --api-key ${{ secrets.NUGET_APIKEY }} 

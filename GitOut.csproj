@@ -4,12 +4,12 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>1.0.0</Version>
     <Authors>xbotter</Authors>
     <Description>Git Branch Automation Tool</Description>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>git-out</ToolCommandName>
     <OutputType>Exe</OutputType>
+    <PackageOutputPath>./nupkg</PackageOutputPath>
   </PropertyGroup>
 
   <ItemGroup>
