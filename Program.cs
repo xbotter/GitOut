@@ -1,10 +1,13 @@
 ﻿using System.CommandLine;
+using System.Text.RegularExpressions;
 using LibGit2Sharp;
 using Microsoft.Extensions.Logging;
 
+const string defaultBranch = "`default`";
+
 var mainBranchOption = new Option<string>(
     ["--main-branch", "-m"],
-    getDefaultValue: () => "main",
+    getDefaultValue: () => defaultBranch,
     description: "The main branch name"
 );
 
@@ -50,7 +53,7 @@ static void MainHandle(
 
     if (repo.RetrieveStatus().IsDirty && !forceCheckout)
     {
-       logger.LogError("Repository has uncommitted changes");
+        logger.LogError("Repository has uncommitted changes");
         return;
     }
 
@@ -67,6 +70,21 @@ static void MainHandle(
         TagFetchMode = TagFetchMode.None
     };
 
+    if (mainBranch == defaultBranch)
+    {
+        var mBranch = repo.Branches.Where(_ => _.IsRemote)
+                            .FirstOrDefault(_ => _.CanonicalName.EndsWith("main") || _.CanonicalName.EndsWith("master"));
+        if (mBranch == null)
+        {
+            logger.LogError("No main/master branch specified");
+            mainBranch = "master";
+        }
+        else
+        {
+            mainBranch = mBranch.CanonicalName.Split('/')[^1];
+        }
+    }
+
     logger.LogInformation($"Fetching origin {mainBranch} branch");
 
     Commands.Fetch(repo, "origin", [$"+refs/heads/{mainBranch}:refs/remotes/origin/{mainBranch}"], options, $"Fetching origin {mainBranch} branch");
@@ -75,7 +93,7 @@ static void MainHandle(
 
     var commit = mainBranchRef.Tip;
 
-    logger.LogInformation($"Creating and checking out new branch {newBranch}");
+    logger.LogInformation($"Creating new branch {newBranch}");
     var branch = repo.CreateBranch(newBranch, commit);
 
     var checkoutOptions = new CheckoutOptions
