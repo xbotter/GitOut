@@ -14,7 +14,7 @@ dotnet tool install -g gitout
 ## Usage
 
 ```bash
-gitout my-new-branch
+git-out my-new-branch
 ```
 
 This will switch to the main branch, pull the latest code, and then switch to the new branch `my-new-branch`.
@@ -22,7 +22,7 @@ This will switch to the main branch, pull the latest code, and then switch to th
 If you want to switch to the other branch and pull the latest code, you can run:
 
 ```bash
-gitout -m master my-new-branch
+git-out -m master my-new-branch
 ```
 
 ## License

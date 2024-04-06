@@ -1,8 +1,10 @@
 ﻿using System.CommandLine;
+using System.Text.RegularExpressions;
 using LibGit2Sharp;
 using Microsoft.Extensions.Logging;
 
-const string defaultBranch = "[default]";
+const string defaultBranch = "`default`";
+const string branchPattern = @"^(?!\/|\.)(?!.*[\/\.]\.)(?!.*\/\/)(?!.*@\{)(?!\/\.lock$)[^\040\177 ~^:?*[]+\/\.lock][^\040\177 ~^:?*[]+]*$";
 
 var mainBranchOption = new Option<string>(
     ["--main-branch", "-m"],
@@ -48,6 +50,12 @@ static void MainHandle(
         return;
     }
 
+    if(!Regex.IsMatch(newBranch, branchPattern))
+    {
+        logger.LogError("Invalid branch name");
+        return;
+    }
+
     var repo = new Repository(currentDir);
 
     if (repo.RetrieveStatus().IsDirty && !forceCheckout)
@@ -71,16 +79,16 @@ static void MainHandle(
 
     if (mainBranch == defaultBranch)
     {
-        var headBranch = repo.Branches.FirstOrDefault(b => b.IsRemote && b.FriendlyName == "origin/HEAD");
-
-        if (headBranch == null)
+        var mBranch = repo.Branches.Where(_ => _.IsRemote)
+                            .FirstOrDefault(_ => _.CanonicalName.EndsWith("main") || _.CanonicalName.EndsWith("master"));
+        if (mBranch == null)
         {
-            logger.LogError("No main branch specified and no origin/HEAD branch found");
+            logger.LogError("No main/master branch specified");
             mainBranch = "master";
         }
         else
         {
-            mainBranch = headBranch.UpstreamBranchCanonicalName.Split('/').Last();
+            mainBranch = mBranch.CanonicalName.Split('/')[^1];
         }
     }
 
