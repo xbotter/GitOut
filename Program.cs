@@ -4,7 +4,6 @@ using LibGit2Sharp;
 using Microsoft.Extensions.Logging;
 
 const string defaultBranch = "`default`";
-const string branchPattern = @"^(?!\/|\.)(?!.*[\/\.]\.)(?!.*\/\/)(?!.*@\{)(?!\/\.lock$)[^\040\177 ~^:?*[]+\/\.lock][^\040\177 ~^:?*[]+]*$";
 
 var mainBranchOption = new Option<string>(
     ["--main-branch", "-m"],
@@ -47,12 +46,6 @@ static void MainHandle(
     if (!Repository.IsValid(currentDir))
     {
         logger.LogError("Not a git repository");
-        return;
-    }
-
-    if(!Regex.IsMatch(newBranch, branchPattern))
-    {
-        logger.LogError("Invalid branch name");
         return;
     }
 
