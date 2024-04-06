@@ -33,15 +33,6 @@ cmd.SetHandler(MainHandle,newBranchArgument,mainBranchOption, forceCheckout);
 
 await cmd.InvokeAsync(args);
 
-/*
-cmd.SetHandler((mainBranch,newBranch) =>
-{
-    git fetch origin");
-    git checkout {mainBranch}");
-    git pull origin {mainBranch}");
-    git checkout -b {newBranch}");
-},mainBranchOption, newBranchArgument);
-*/
 static void MainHandle(
             string newBranch,
             string mainBranch,
