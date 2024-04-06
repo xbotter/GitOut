@@ -1,6 +1,7 @@
-﻿using System.Diagnostics;
-using System.CommandLine;
+﻿using System.CommandLine;
 using LibGit2Sharp;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Console;
 
 var mainBranchOption = new Option<string>(
     ["--main-branch", "-m"],
@@ -19,8 +20,6 @@ var newBranchArgument = new Argument<string>(
     description: "The new branch name"
 );
 
-
-
 var cmd = new RootCommand
 {
     mainBranchOption,
@@ -29,28 +28,30 @@ var cmd = new RootCommand
 };
 
 
-cmd.SetHandler(MainHandle,newBranchArgument,mainBranchOption, forceCheckout);
+cmd.SetHandler(MainHandle, newBranchArgument, mainBranchOption, forceCheckout);
 
 await cmd.InvokeAsync(args);
 
 static void MainHandle(
             string newBranch,
             string mainBranch,
-            bool forceCheckout  )
+            bool forceCheckout)
 {
+    var logger = LoggerFactory.Create(builder => builder.AddConsole())
+                .CreateLogger("git-out");
     var currentDir = Environment.CurrentDirectory;
 
     if (!Repository.IsValid(currentDir))
     {
-        Console.Error.WriteLine("Not a git repository");
+        logger.LogError("Not a git repository");
         return;
     }
 
     var repo = new Repository(currentDir);
 
-    if(repo.RetrieveStatus().IsDirty && !forceCheckout)
+    if (repo.RetrieveStatus().IsDirty && !forceCheckout)
     {
-        Console.Error.WriteLine("Repository has uncommitted changes");
+       logger.LogError("Repository has uncommitted changes");
         return;
     }
 
@@ -58,7 +59,7 @@ static void MainHandle(
 
     if (remote == null)
     {
-        Console.Error.WriteLine("No remote named 'origin'");
+        logger.LogError("No remote named 'origin'");
         return;
     }
 
@@ -67,12 +68,15 @@ static void MainHandle(
         TagFetchMode = TagFetchMode.None
     };
 
+    logger.LogInformation($"Fetching origin {mainBranch} branch");
+
     Commands.Fetch(repo, "origin", [$"+refs/heads/{mainBranch}:refs/remotes/origin/{mainBranch}"], options, $"Fetching origin {mainBranch} branch");
-    
+
     var mainBranchRef = repo.Branches[$"remotes/origin/{mainBranch}"];
 
     var commit = mainBranchRef.Tip;
 
+    logger.LogInformation($"Creating and checking out new branch {newBranch}");
     var branch = repo.CreateBranch(newBranch, commit);
 
     var checkoutOptions = new CheckoutOptions
@@ -80,5 +84,6 @@ static void MainHandle(
         CheckoutModifiers = CheckoutModifiers.Force
     };
 
+    logger.LogInformation($"Checking out {newBranch}");
     Commands.Checkout(repo, branch, checkoutOptions);
 }
