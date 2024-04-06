@@ -1,7 +1,6 @@
 ﻿using System.CommandLine;
 using LibGit2Sharp;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Console;
 
 var mainBranchOption = new Option<string>(
     ["--main-branch", "-m"],
