@@ -1,10 +1,17 @@
-﻿using System.Diagnostics;
-using System.CommandLine;
+﻿using System.CommandLine;
+using LibGit2Sharp;
+using Microsoft.Extensions.Logging;
 
 var mainBranchOption = new Option<string>(
-    ["--main-branch","-m"],
+    ["--main-branch", "-m"],
     getDefaultValue: () => "main",
     description: "The main branch name"
+);
+
+var forceCheckout = new Option<bool>(
+    ["--force", "-f"],
+    getDefaultValue: () => false,
+    description: "Force checkout"
 );
 
 var newBranchArgument = new Argument<string>(
@@ -15,50 +22,67 @@ var newBranchArgument = new Argument<string>(
 var cmd = new RootCommand
 {
     mainBranchOption,
+    forceCheckout,
     newBranchArgument
 };
 
 
-cmd.SetHandler((mainBranch,newBranch) =>
-{
-    ExecuteGitCommand("--version");
-    ExecuteGitCommand("fetch origin");
-    ExecuteGitCommand($"checkout {mainBranch}");
-    ExecuteGitCommand($"pull origin {mainBranch}");
-    ExecuteGitCommand($"checkout -b {newBranch}");
-},mainBranchOption, newBranchArgument);
-
+cmd.SetHandler(MainHandle, newBranchArgument, mainBranchOption, forceCheckout);
 
 await cmd.InvokeAsync(args);
 
-static void ExecuteGitCommand(string command)
+static void MainHandle(
+            string newBranch,
+            string mainBranch,
+            bool forceCheckout)
 {
-    using (Process process = new Process())
+    var logger = LoggerFactory.Create(builder => builder.AddConsole())
+                .CreateLogger("git-out");
+    var currentDir = Environment.CurrentDirectory;
+
+    if (!Repository.IsValid(currentDir))
     {
-        process.StartInfo.UseShellExecute = false;
-        process.StartInfo.RedirectStandardOutput = true;
-        process.StartInfo.RedirectStandardError = true;
-        process.StartInfo.CreateNoWindow = true;
-        process.StartInfo.FileName = "git";
-        process.StartInfo.Arguments = command;
-
-        Console.WriteLine($"Executing: git {command}");
-
-        process.Start();
-
-        string output = process.StandardOutput.ReadToEnd();
-        string error = process.StandardError.ReadToEnd();
-
-        process.WaitForExit();
-
-        if (process.ExitCode != 0)
-        {
-            Console.Error.WriteLine(error);
-            Environment.Exit(process.ExitCode);
-        }
-        else
-        {
-            Console.WriteLine(output);
-        }
+        logger.LogError("Not a git repository");
+        return;
     }
+
+    var repo = new Repository(currentDir);
+
+    if (repo.RetrieveStatus().IsDirty && !forceCheckout)
+    {
+       logger.LogError("Repository has uncommitted changes");
+        return;
+    }
+
+    var remote = repo.Network.Remotes["origin"];
+
+    if (remote == null)
+    {
+        logger.LogError("No remote named 'origin'");
+        return;
+    }
+
+    var options = new FetchOptions
+    {
+        TagFetchMode = TagFetchMode.None
+    };
+
+    logger.LogInformation($"Fetching origin {mainBranch} branch");
+
+    Commands.Fetch(repo, "origin", [$"+refs/heads/{mainBranch}:refs/remotes/origin/{mainBranch}"], options, $"Fetching origin {mainBranch} branch");
+
+    var mainBranchRef = repo.Branches[$"remotes/origin/{mainBranch}"];
+
+    var commit = mainBranchRef.Tip;
+
+    logger.LogInformation($"Creating and checking out new branch {newBranch}");
+    var branch = repo.CreateBranch(newBranch, commit);
+
+    var checkoutOptions = new CheckoutOptions
+    {
+        CheckoutModifiers = CheckoutModifiers.Force
+    };
+
+    logger.LogInformation($"Checking out {newBranch}");
+    Commands.Checkout(repo, branch, checkoutOptions);
 }
