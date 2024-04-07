@@ -1,5 +1,5 @@
 ﻿using System.CommandLine;
-using System.Text.RegularExpressions;
+using System.Diagnostics;
 using LibGit2Sharp;
 using Microsoft.Extensions.Logging;
 
@@ -29,18 +29,19 @@ var cmd = new RootCommand
     newBranchArgument
 };
 
+var logger = LoggerFactory.Create(builder => builder.AddConsole())
+                .CreateLogger("git-out");
 
 cmd.SetHandler(MainHandle, newBranchArgument, mainBranchOption, forceCheckout);
 
 await cmd.InvokeAsync(args);
 
-static void MainHandle(
+async void MainHandle(
             string newBranch,
             string mainBranch,
             bool forceCheckout)
 {
-    var logger = LoggerFactory.Create(builder => builder.AddConsole())
-                .CreateLogger("git-out");
+
     var currentDir = Environment.CurrentDirectory;
 
     if (!Repository.IsValid(currentDir))
@@ -65,15 +66,11 @@ static void MainHandle(
         return;
     }
 
-    var options = new FetchOptions
-    {
-        TagFetchMode = TagFetchMode.None
-    };
 
     if (mainBranch == defaultBranch)
     {
         var mBranch = repo.Branches.Where(_ => _.IsRemote)
-                            .FirstOrDefault(_ => _.CanonicalName.EndsWith("main") || _.CanonicalName.EndsWith("master"));
+                            .FirstOrDefault(_ => _.CanonicalName.EndsWith("/main") || _.CanonicalName.EndsWith("/master"));
         if (mBranch == null)
         {
             logger.LogError("No main/master branch specified");
@@ -87,7 +84,7 @@ static void MainHandle(
 
     logger.LogInformation($"Fetching origin {mainBranch} branch");
 
-    Commands.Fetch(repo, "origin", [$"+refs/heads/{mainBranch}:refs/remotes/origin/{mainBranch}"], options, $"Fetching origin {mainBranch} branch");
+    await ExecuteGitCommandAsync("fetch", $"origin +refs/heads/{mainBranch}:refs/remotes/origin/{mainBranch}");
 
     var mainBranchRef = repo.Branches[$"remotes/origin/{mainBranch}"];
 
@@ -103,4 +100,36 @@ static void MainHandle(
 
     logger.LogInformation($"Checking out {newBranch}");
     Commands.Checkout(repo, branch, checkoutOptions);
+}
+
+async Task ExecuteGitCommandAsync(string command, string args)
+{
+    using (Process process = new Process())
+    {
+        process.StartInfo.UseShellExecute = false;
+        process.StartInfo.RedirectStandardOutput = true;
+        process.StartInfo.RedirectStandardError = true;
+        process.StartInfo.CreateNoWindow = true;
+        process.StartInfo.FileName = "git";
+        process.StartInfo.Arguments = $"{command} {args}";
+
+        logger.LogInformation($"Executing: git {command} {args}");
+
+        process.Start();
+
+        string output = process.StandardOutput.ReadToEnd();
+        string error = process.StandardError.ReadToEnd();
+
+        await process.WaitForExitAsync();
+
+        if (process.ExitCode != 0)
+        {
+            logger.LogError(error);
+            Environment.Exit(process.ExitCode);
+        }
+        else
+        {
+            logger.LogInformation(output);
+        }
+    }
 }
