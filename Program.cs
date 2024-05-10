@@ -17,6 +17,12 @@ var forceCheckout = new Option<bool>(
     description: "Force checkout"
 );
 
+var saveStash = new Option<bool>(
+    ["--stash", "-s"],
+    getDefaultValue: () => false,
+    description: "Save stash"
+);
+
 var newBranchArgument = new Argument<string>(
     "new branch name",
     description: "The new branch name"
@@ -26,20 +32,22 @@ var cmd = new RootCommand
 {
     mainBranchOption,
     forceCheckout,
+    saveStash,
     newBranchArgument
 };
 
 var logger = LoggerFactory.Create(builder => builder.AddConsole())
                 .CreateLogger("git-out");
 
-cmd.SetHandler(MainHandle, newBranchArgument, mainBranchOption, forceCheckout);
+cmd.SetHandler(MainHandle, newBranchArgument, mainBranchOption, forceCheckout, saveStash);
 
 await cmd.InvokeAsync(args);
 
 async void MainHandle(
             string newBranch,
             string mainBranch,
-            bool forceCheckout)
+            bool forceCheckout,
+            bool saveStash)
 {
 
     var currentDir = Environment.CurrentDirectory;
@@ -51,12 +59,26 @@ async void MainHandle(
     }
 
     var repo = new Repository(currentDir);
+    bool StashSaved = false;
 
-    if (repo.RetrieveStatus().IsDirty && !forceCheckout)
+    if (repo.RetrieveStatus().IsDirty)
     {
-        logger.LogError("Repository has uncommitted changes");
-        return;
+        if (saveStash)
+        {
+            logger.LogInformation("Stashing changes");
+
+            var signature = new Signature("git-out", "git-out@github.com", DateTimeOffset.Now);
+            repo.Stashes.Add(signature, "Stash by git-out");
+
+            StashSaved = true;
+        }
+        else if (!forceCheckout)
+        {
+            logger.LogError("Repository has uncommitted changes");
+            return;
+        }
     }
+
 
     var remote = repo.Network.Remotes["origin"];
 
@@ -65,7 +87,6 @@ async void MainHandle(
         logger.LogError("No remote named 'origin'");
         return;
     }
-
 
     if (mainBranch == defaultBranch)
     {
@@ -100,6 +121,12 @@ async void MainHandle(
 
     logger.LogInformation($"Checking out {newBranch}");
     Commands.Checkout(repo, branch, checkoutOptions);
+
+    if (StashSaved)
+    {
+        logger.LogInformation("Applying stash");
+        repo.Stashes.Pop(0);
+    }
 }
 
 async Task ExecuteGitCommandAsync(string command, string args)
